@@ -8,7 +8,7 @@ library(x3ptools)
 
 # Create the set before using this script
 setName <- "Hamby-44-CSAFE"
-setSelector <- "#tableStudies_wrapper > div:nth-child(2) > div > div > div.DTFC_LeftWrapper > div.DTFC_LeftBodyWrapper > div > table > tbody > tr > td > a"
+setSelector <- "#tableStudies_wrapper > div:nth-child(2) > div > div > div.DTFC_LeftWrapper > div.DTFC_LeftBodyWrapper > div > table > tbody > tr.even > td > a"
 
 
 
@@ -17,34 +17,37 @@ barrel_regex <- "((?:Barrel \\d{1,})|(Unknown))"
 
 
 # --- Options ----
-barrel_brand_options <- c("AA Arms", "Al-Qadissiya", "Astra", "Beretta", 
-                          "Bersa", "Browning", "Bryco", "Calico", "Canik", "Chiappa", "Colt", 
-                          "CZ-USA", "Davis Industries", "Encom America", "Feather Industries", 
-                          "FEG", "FM Argentine", "FN Herstal", "Glock", "Heckler & Koch", 
-                          "Hi-Point", "Hungarian Arms Works", "IMI", "Ingram", "Intratec", 
-                          "Kahr Arms", "Kel-Tec", "Kimber", "Llama", "Luger", "Maadi", 
-                          "Norinco", "Para Ordnance", "Remington", "Republic Arms", "Rossi", 
-                          "Ruger", "SCCY", "Sig Sauer", "Smith & Wesson", "Springfield Armory", 
-                          "Stallard Arms", "Star", "Sten", "Steyr Arms", "Stoeger", "SWD", 
-                          "Tanfoglio", "Taurus", "Walther", "Other")
+dropdown_options <- list(
+  barrel_brand_options = c("AA Arms", "Al-Qadissiya", "Astra", "Beretta", 
+                           "Bersa", "Browning", "Bryco", "Calico", "Canik", "Chiappa", "Colt", 
+                           "CZ-USA", "Davis Industries", "Encom America", "Feather Industries", 
+                           "FEG", "FM Argentine", "FN Herstal", "Glock", "Heckler & Koch", 
+                           "Hi-Point", "Hungarian Arms Works", "IMI", "Ingram", "Intratec", 
+                           "Kahr Arms", "Kel-Tec", "Kimber", "Llama", "Luger", "Maadi", 
+                           "Norinco", "Para Ordnance", "Remington", "Republic Arms", "Rossi", 
+                           "Ruger", "SCCY", "Sig Sauer", "Smith & Wesson", "Springfield Armory", 
+                           "Stallard Arms", "Star", "Sten", "Steyr Arms", "Stoeger", "SWD", 
+                           "Tanfoglio", "Taurus", "Walther", "Other"),
+  
+  bullet_brand_options = c("Aguila", "Bear", "CCI", "Federal", "Fiocchi", "FN", "Hornady", 
+                           "Nosler", "PMC", "Remington", "Sellier & Bellot", "Speer", "Tulammo", 
+                           "Weatherby", "Winchester", "Wolf", "Other"),
+  
+  bullet_weight_options = c("= 301", "101-150", "151-200", "201-250", "251-300", "30-50", "51-100", 
+                            "Not specified"),
+  
+  surface_material_options = c("Brass", "Copper", "Lead", "Polymer", "Steel", "Not specified", "Other"),
+  
+  caliber_options = c("22LR", "25 Auto", "32 Auto", "357 Sig", "38/357", "380 Auto", 
+                      "40/10 mm", "44 Spl/Mag", "45 Auto", "9 mm Luger", "Other"),
+  
+  breech_face_options = c("Arched", "Circular", "Cross Hatch", "Granular", "Smooth", "Striated", "Not specified", "Other"),
+  
+  n_lands_options = c(as.character(2:9), ">=10", "Not specified"),
+  
+  twist_options = c("Left", "Right", "Not specified")
+)
 
-bullet_brand_options <- c("Aguila", "Bear", "CCI", "Federal", "Fiocchi", "FN", "Hornady", 
-                          "Nosler", "PMC", "Remington", "Sellier & Bellot", "Speer", "Tulammo", 
-                          "Weatherby", "Winchester", "Wolf", "Other")
-
-bullet_weight_options <- c("= 301", "101-150", "151-200", "201-250", "251-300", "30-50", "51-100", 
-                           "Not specified")
-
-surface_material_options <- c("Brass", "Copper", "Lead", "Polymer", "Steel", "Not specified", "Other")
-
-caliber_options <- c("22LR", "25 Auto", "32 Auto", "357 Sig", "38/357", "380 Auto", 
-                     "40/10 mm", "44 Spl/Mag", "45 Auto", "9 mm Luger", "Other")
-
-breech_face_options <- c("Arched", "Circular", "Cross Hatch", "Granular", "Smooth", "Striated", "Not specified", "Other")
-
-n_lands_options <- c(as.character(2:9), ">=10", "Not specified")
-
-twist_options <- c("Left", "Right", "Not specified")
 
 # --- Helper functions for Selenium ----
 
@@ -238,6 +241,7 @@ loop_test <- function(test_expr, test_fcn, thing_expr, n_lim = 15, warning_text 
 #' 
 #' @param rd a remote driver
 #' @param modal_css_sel css selector for the modal (usually ".modal-open")
+#' @param btn_css_sel css selector for the button to open the modal
 open_modal <- function(rd, modal_css_sel, btn_css_sel) {
   return(
     loop_test(
@@ -245,11 +249,16 @@ open_modal <- function(rd, modal_css_sel, btn_css_sel) {
       function(x) "try-error" %in% class(x),
       function() rd$findElement(using = "css selector", value = btn_css_sel)$clickElement(),
       warning_text = "open_modal failed",
-      sleep_after = 5
+      sleep_after = 2
     )
   )
 }
 
+#' A loop test to close a modal and submit the data
+#' 
+#' @param rd a remote driver
+#' @param modal_css_sel css selector for the modal (usually ".modal-open")
+#' @param btn_css_sel css selector for the button to close the modal/save the data
 submit_modal <- function(rd, modal_css_sel, btn_css_sel) {
   return(
     loop_test(
@@ -257,16 +266,27 @@ submit_modal <- function(rd, modal_css_sel, btn_css_sel) {
       function(x) !("try-error" %in% class(x)),
       function() remDr$findElement(using = "css selector", value = btn_css_sel)$clickElement(),
       warning_text = "submit_modal failed",
-      sleep_after = 5
+      sleep_after = 2
     )
   )
 }
 
+#' Get text for a link
+#' 
+#' @param rd a remote driver
+#' @param css_sel CSS selector for link element
 find_text <- function(rd, css_sel) {
   quiet_try(rd$findElement("css selector", value = css_sel)$getElementText() %>% unlist())
 }
 
-
+#' Function to create a new firearm
+#' 
+#' @param rd a remote driver
+#' @param df a single-row data frame with the necessary information (name, model, 
+#'           comments, brand, brand_other, caliber, caliber_other, consec_manufacture, 
+#'           cartridges, bullets, breech_face_class, breech_face_other, firing_pin_class,
+#'           firing_pin_other, n_lands, twist_direction)
+#' @param seturl URL to go to before creating the barrel (defaults to current URL)
 create_firearms <- function(rd, df, seturl = rd$getCurrentUrl()){
 
   stopifnot("name" %in% names(df))
@@ -285,6 +305,10 @@ create_firearms <- function(rd, df, seturl = rd$getCurrentUrl()){
   stopifnot("firing_pin_other" %in% names(df))
   stopifnot("n_lands" %in% names(df))
   stopifnot("twist_direction" %in% names(df))
+  
+  stopifnot(df$brand %in% dropdown_options$barrel_brand_options)
+  stopifnot(df$caliber %in% dropdown_options$caliber_options)
+  
   
   rd$navigate(seturl)
   
@@ -315,13 +339,16 @@ create_firearms <- function(rd, df, seturl = rd$getCurrentUrl()){
     fill_checkbox(rd, "#HasBullet", df$bullets)
     
     if (df$cartridges) {
+      stopifnot(df$breech_face_class %in% dropdown_options$breech_face_options)
       fill_conditional_field(rd, "#BreechFaceClassID", "#OtherBreechFace", df$breech_face_class, df$breech_face_other)
       fill_conditional_field(rd, "#FiringPinClassID", "#OtherFiringPin", df$firing_pin_class, df$firing_pin_other)
     }
     
     if (df$bullets) {
-      fill_text_field(rd, "#NumberOfLandsID", df$n_lands, clear = T)
-      fill_text_field(rd, "#TwistDirectionID", df$twist_direction, clear = T)
+      stopifnot(df$df$n_lands %in% dropdown_options$n_lands_options)
+      stopifnot(df$twist_direction %in% dropdown_options$twist_options)
+      fill_dropdown_field(rd, "#NumberOfLandsID", df$n_lands)
+      fill_dropdown_field(rd, "#TwistDirectionID", df$twist_direction)
     }
     
     submit_modal(rd, ".modal-open", "input.btn:nth-child(2)")
@@ -333,7 +360,34 @@ create_firearms <- function(rd, df, seturl = rd$getCurrentUrl()){
   return(check_link_exists(rd, sprintf("//a[text()=\"%s\"]", df$name), "Barrel"))
 }
 
+
+#' Function to create a new bullet in a specific barrel
+#' 
+#' @param remDr a remote driver
+#' @param df a single-row data frame with the necessary information (bullet, cartridge_des, 
+#'           lot_no, firing_seq, comments, brand, brand_other, caliber, caliber_other, grain, 
+#'           surface_mat, surface_mat_other, barrel, details_url)
 create_bullets <- function(remDr, df) {
+  
+  stopifnot("bullet" %in% names(df))
+  stopifnot("cartridge_des" %in% names(df))
+  stopifnot("comments" %in% names(df))
+  stopifnot("brand" %in% names(df))
+  stopifnot("brand_other" %in% names(df))
+  stopifnot("caliber" %in% names(df))
+  stopifnot("caliber_other" %in% names(df))
+  stopifnot("lot_no" %in% names(df))
+  stopifnot("firing_seq" %in% names(df))
+  stopifnot("grain" %in% names(df))
+  stopifnot("surface_mat" %in% names(df))
+  stopifnot("surface_mat_other" %in% names(df))
+  stopifnot("barrel" %in% names(df))
+  stopifnot("details_url" %in% names(df))
+  
+  stopifnot(df$brand %in% dropdown_options$barrel_brand_options)
+  stopifnot(df$caliber %in% dropdown_options$caliber_options)
+  stopifnot(df$grain %in% dropdown_options$bullet_weight_options)
+  stopifnot(df$surface_mat %in% dropdown_options$surface_material_options)
   
   barrel_name_sel <- paste("div.row:nth-child(4) > div:nth-child(1) > div:nth-child(1) >", 
                            "div:nth-child(2) > div:nth-child(2) > div:nth-child(1) > ", 
@@ -377,6 +431,13 @@ create_bullets <- function(remDr, df) {
   return(check_link_exists(remDr, sprintf("//a[text()=\"%s\"]", df$bullet), "Bullet"))
 }
 
+#' Function to upload land scans to bullet objects
+#' 
+#' @param remDr a remote driver
+#' @param land_df a single-row data frame with required information (bullet, bullet_link,
+#'          new_filename, creator, nist_meas, measurand, lighting_dir, lighting_dir_other, 
+#'          meas_type, meas_type_other, instrument_brand, instrument_model, roi, land, 
+#'          lateral_res, vertical_res, obj, aperture, comment, filename)
 create_lands <- function(remDr, land_df) {
   bullet_sel <- paste("div.row:nth-child(9) > div:nth-child(1) > div:nth-child(1) > ", 
                       "div:nth-child(2) > div:nth-child(2) > div:nth-child(1) > ", 
@@ -476,6 +537,8 @@ datafiles <- list.files(datapath, full.names = T)
 
 barrels <- str_extract(datafiles, barrel_regex) %>%
   unique()
+
+barrels <- barrels[!is.na(barrels)]
 
 # DF of barrel info
 firearm_info <- data_frame(
