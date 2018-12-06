@@ -14,7 +14,7 @@ source("UploadFunctions.R")
 # barrel_regex <- "((?:Barrel \\d{1,})|(Unknown))"
 # meta_path <- "meta.csv"
 
-setName <- "PhoenixPD"
+setName <- "Phoenix"
 datapath <- "/media/Sunny/CSAFE/phoenix-upload/x3ps-nist"
 barrel_regex <- "((?:Unk)|([A-Z]\\d{1}[A-Z]\\d{1,}))"
 meta_path <- "/media/Sunny/CSAFE/phoenix-upload/phoenix-meta.csv"
@@ -46,6 +46,9 @@ dropdown_options <- list(
   caliber_options = c("22LR", "25 Auto", "32 Auto", "357 Sig", "38/357", "380 Auto", 
                       "40/10 mm", "44 Spl/Mag", "45 Auto", "9 mm Luger", "Other"),
   
+  bullet_caliber_options = c("22LR", "25 Auto", "32 Auto", "357 Sig", "38/357", "380 Auto", 
+                             "40/10 mm", "44 Spl/Mag", "45 Auto", "9 mm", "Other"),
+  
   breech_face_options = c("Arched", "Circular", "Cross Hatch", "Granular", "Smooth", "Striated", "Not specified", "Other"),
   
   n_lands_options = c(as.character(2:9), ">=10", "Not specified"),
@@ -70,7 +73,7 @@ remDr$navigate(url = "https://tsapps.nist.gov/NRBTD/")
 
 # Use: https://cran.r-project.org/web/packages/keyringr/vignettes/Avoiding_plain_text_passwords_in_R_with_keyringr.html
 # To set up keyringr with the correct password
-nbtrd_login(remDr, "csafeISU", decrypt_gk_pw("db csafe user csafeISU"))
+nbtrd_login(remDr, "srvander", decrypt_gk_pw("db csafe user srvander"))
 
 remDr$navigate("https://tsapps.nist.gov/NRBTD/Studies/Studies")
 
@@ -135,28 +138,28 @@ rm(barrelList, barrelLinks, elList, editLinks)
 
 
 bullet_info <- data_frame(
-  brand = "American Eagle", 
-  brand_other = NA,
+  brand = "Other", 
+  brand_other = "American Eagle",
   caliber = "9 mm",
   caliber_other = NA,
   grain = "101-150",
   cartridge_des = "9 mm Luger",
   surface_mat = "Copper",
   surface_mat_other = NA,
-  firing_seq = "repeat fire",
+  firing_seq = "",
   lot_no = "",
   comments = ""
 )
 
 metadata <- read_csv(meta_path)
 metadata <- metadata %>%
-  mutate(barrel = ifelse(bullet == "Bullet E", "Unknown", barrel)) %>%
+  # mutate(barrel = ifelse(bullet == "Bullet E", "Unknown", barrel)) %>%
   left_join(select(firearm_links, barrel = firearm_name, id, details_url)) %>%
   merge(bullet_info) %>%
   mutate_at(vars(barrel, bullet), str_replace_all, "[[:punct:]]", "")
 
 bullets <- metadata %>% 
-  select(-land, -land_str) %>%
+  select(-land) %>%
   unique() %>%
   mutate(idx = 1:n()) %>%
   nest(-idx, .key = "bullet_only_info")
@@ -167,6 +170,12 @@ bullets <- unnest(bullets)
 
 # --- Create Lands ----
 
+parse_obj <- function(x) {
+  x %>%
+    str_extract("\\d{1,}[xX]") %>%
+    parse_number()
+}
+
 get_land_info <- function(filename) {
   tmp <- read_x3p(filename)
   
@@ -174,7 +183,7 @@ get_land_info <- function(filename) {
     c(paste0("Scan Comment: ", tmp$general.info$Comment[[1]]),
       paste0("Instrument Serial Number: ", tmp$general.info$Instrument$Serial[[1]]),
       paste0("Instrument Version: ",       tmp$general.info$Instrument$Version[[1]]),
-      paste0("Instrument Calibration Date: ", tmp$general.info$CalibrationDate[[1]]),
+      paste0("Instrument Calibration Date: ", unlist(tmp$general.info$CalibrationDate)),
       paste0("Probing System: ", tmp$general.info$ProbingSystem$Type[[1]]),
       paste0("Scanned by: ", tmp$general.info$Creator[[1]]),
       paste0("Creation Date: ", tmp$general.info$Date[[1]]),
@@ -187,9 +196,9 @@ get_land_info <- function(filename) {
     filename = filename, 
     instrument_brand = tmp$general.info$Instrument$Manufacturer[[1]],
     instrument_model = tmp$general.info$Instrument$Model[[1]],
-    lateral_res = tmp$header.info$incrementX*1e6,
-    vertical_res = tmp$header.info$incrementY*1e6,
-    obj = str_replace(tmp$general.info$ProbingSystem$Identification[[1]], "[xX]", "") %>% as.numeric(),
+    lateral_res = tmp$header.info$incrementX,
+    vertical_res = tmp$header.info$incrementY,
+    obj = parse_obj(tmp$general.info$ProbingSystem$Identification[[1]]),
     aperture = NA,
     comment = full_comment
   )
@@ -203,19 +212,21 @@ default_land_info <- data_frame(
   lighting_dir_other = NA,
   meas_type = "Other",
   meas_type_other = "Confocal Light Microscope",
-  roi = "Land Engraved Area"
+  roi = "Land Engraved Area",
+  othercomment = "Scanned by Bill Henderson, downsampled by Heike Hofmann"
 )
 
-indiv_land_info <- list.files("data/", full.names = T) %>%
+indiv_land_info <- list.files(datapath, full.names = T) %>%
   map_df(get_land_info)
 
 indiv_land_info <- indiv_land_info %>%
-  mutate(land_str = basename(filename)) %>%
-  left_join(select(metadata, barrel, bullet, land, land_str)) %>%
+  mutate(barrelland = basename(filename) %>% str_remove("\\.x3p")) %>%
+  left_join(select(metadata, barrel, bullet, land, barrelland)) %>%
   left_join(select(bullets, bullet, barrel, bullet_link)) %>%
   merge(default_land_info) %>%
-  mutate(new_filename = sprintf("data/%s-%s-%s.x3p", barrel, bullet, land) %>%
-           str_replace_all("(Barrel|Bullet|Land)\\s", "\\1_")) %>%
+  mutate(comment = paste(comment, othercomment, sep = "\n"),
+         new_filename = sprintf("%s/%s-%s-%s.x3p", datapath, barrel, bullet, land) %>%
+           str_replace_all("(Barrel|Bullet|Land|L)\\s", "\\1_")) %>%
   mutate(idx = 1:n()) %>%
   nest(-idx, .key = "land_df")
 

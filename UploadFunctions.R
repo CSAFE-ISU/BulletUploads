@@ -335,8 +335,8 @@ create_bullets <- function(remDr, df) {
   stopifnot("barrel" %in% names(df))
   stopifnot("details_url" %in% names(df))
   
-  stopifnot(df$brand %in% dropdown_options$barrel_brand_options)
-  stopifnot(df$caliber %in% dropdown_options$caliber_options)
+  stopifnot(df$brand %in% dropdown_options$bullet_brand_options)
+  stopifnot(df$caliber %in% dropdown_options$bullet_caliber_options)
   stopifnot(df$grain %in% dropdown_options$bullet_weight_options)
   stopifnot(df$surface_mat %in% dropdown_options$surface_material_options)
   
@@ -369,7 +369,7 @@ create_bullets <- function(remDr, df) {
     fill_text_field(remDr, "#Comment", df$comments, clear = T)
     
     # This will match the closest (alphabetical) brand to df$brand's value
-    fill_conditional_field(remDr, "#BrandId", "#BrandOther", df$brand, df$brand_other)
+    fill_conditional_field(remDr, "#BrandId", "#OtherBrand", df$brand, df$brand_other)
     fill_conditional_field(remDr, "#NominalCaliberId", "#OtherNominalCaliber", df$caliber, df$caliber_other)
     fill_dropdown_field(remDr, "#BulletWeightId", df$grain)
     fill_conditional_field(remDr, "#SurfaceMaterialId", "#OtherSurfaceMaterial", 
@@ -440,19 +440,19 @@ create_lands <- function(remDr, land_df) {
     
     fill_text_field(remDr, "#Comment", value = land_df$comment)
     
-    file.copy(file.path(getwd(), land_df$filename), file.path(getwd(), land_df$new_filename), overwrite = T)
+    file.copy(land_df$filename, file.path(getwd(), basename(land_df$new_filename)), overwrite = T)
     
     # Ensure file gets uploaded
     loop_test(
       function() remDr$findElement("css selector", "#ImageFile")$getElementAttribute("value") %>% unlist(),
       function(x) nchar(x) == 0,
-      function() remDr$findElement("css selector", "#ImageFile")$sendKeysToElement(list(file.path(getwd(), land_df$new_filename)))
+      function() remDr$findElement("css selector", "#ImageFile")$sendKeysToElement(list(file.path(getwd(), basename(land_df$new_filename))))
     )
     
     submit_modal(remDr, ".modal-open", "input.btn:nth-child(2)")
     
     # Remove renamed file once it's uploaded
-    file.remove(file.path(getwd(), land_df$new_filename))
+    file.remove(file.path(getwd(), basename(land_df$new_filename)))
   })
   
   
